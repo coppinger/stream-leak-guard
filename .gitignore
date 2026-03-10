@@ -1,0 +1,3 @@
+.buildstory/
+node_modules/
+.env.local

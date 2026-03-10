@@ -1,0 +1,28 @@
+{
+  "name": "stream-leak-guard",
+  "version": "1.0.0",
+  "description": "Protect secrets from leaking on stream when using Claude Code on Twitch/YouTube",
+  "license": "MIT",
+  "bin": {
+    "stream-leak-guard": "./bin/cli.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "keywords": [
+    "claude-code",
+    "streaming",
+    "security",
+    "secrets",
+    "hooks",
+    "twitch",
+    "youtube"
+  ],
+  "files": [
+    "bin/",
+    "src/"
+  ]
+}

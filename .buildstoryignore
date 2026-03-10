@@ -1,0 +1,40 @@
+# Buildstory ignore patterns
+# Files matching these patterns will be excluded from commit data
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+bun.lock
+yarn.lock
+Gemfile.lock
+Cargo.lock
+composer.lock
+poetry.lock
+
+# Generated files
+*.min.js
+*.min.css
+*.map
+dist/
+build/
+.next/
+
+# Binary and media files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.mp4
+*.mp3
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key

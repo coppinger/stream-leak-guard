@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "envFiles": [".env", ".env.local", ".env.development", ".env.production"],
+  "sensitiveFiles": [".env", ".env.*", "credentials.json", "*.pem", "*.key"],
+  "customPatterns": [],
+  "allowedCommands": [],
+  "minSecretLength": 8,
+  "safeEnvPrefixes": [
+    "PUBLIC_",
+    "NEXT_PUBLIC_",
+    "VITE_",
+    "REACT_APP_",
+    "EXPO_PUBLIC_"
+  ],
+  "verbose": false
+}
