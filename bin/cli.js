@@ -6,6 +6,7 @@ const { homedir } = require("node:os");
 
 const { handleSessionStart } = require("../src/hooks/session-start");
 const { handlePreToolUse } = require("../src/hooks/pre-tool-use");
+const { handlePostToolUse } = require("../src/hooks/post-tool-use");
 
 // ── Hook dispatch ──
 
@@ -31,6 +32,18 @@ function runHook(hookName) {
         process.exit(0);
       }
       handlePreToolUse(hookEvent);
+      break;
+    }
+    case "post-tool-use": {
+      let hookEvent;
+      try {
+        hookEvent = JSON.parse(input);
+      } catch {
+        // Can't parse input — fail open
+        process.stderr.write("[stream-leak-guard] Warning: Could not parse hook input\n");
+        process.exit(0);
+      }
+      handlePostToolUse(hookEvent);
       break;
     }
     default:
@@ -104,6 +117,18 @@ const HOOK_ENTRIES = {
       ],
     },
   ],
+  PostToolUse: [
+    {
+      matcher: "Bash|Read|Write|Edit",
+      hooks: [
+        {
+          type: "command",
+          command: "stream-leak-guard --hook post-tool-use",
+          timeout: 5,
+        },
+      ],
+    },
+  ],
 };
 
 /**
@@ -130,17 +155,16 @@ function removeGuardEntries(hooks) {
  */
 function hasGuardHooks(settings) {
   const hooks = settings.hooks || {};
-  const hasSession = (hooks.SessionStart || []).some((entry) =>
-    (entry.hooks || []).some(
-      (h) => h.command && h.command.includes("stream-leak-guard")
-    )
-  );
-  const hasPreTool = (hooks.PreToolUse || []).some((entry) =>
-    (entry.hooks || []).some(
-      (h) => h.command && h.command.includes("stream-leak-guard")
-    )
-  );
-  return { hasSession, hasPreTool, both: hasSession && hasPreTool };
+  const check = (event) =>
+    (hooks[event] || []).some((entry) =>
+      (entry.hooks || []).some(
+        (h) => h.command && h.command.includes("stream-leak-guard")
+      )
+    );
+  const hasSession = check("SessionStart");
+  const hasPreTool = check("PreToolUse");
+  const hasPostTool = check("PostToolUse");
+  return { hasSession, hasPreTool, hasPostTool, all: hasSession && hasPreTool && hasPostTool };
 }
 
 // ── CLI Commands ──
@@ -199,15 +223,16 @@ function cmdInit() {
 
 function cmdStatus() {
   const settings = readSettings();
-  const { hasSession, hasPreTool, both } = hasGuardHooks(settings);
+  const { hasSession, hasPreTool, hasPostTool, all } = hasGuardHooks(settings);
 
   console.log("stream-leak-guard status:");
-  console.log(`  SessionStart hook: ${hasSession ? "installed" : "not found"}`);
-  console.log(`  PreToolUse hook:   ${hasPreTool ? "installed" : "not found"}`);
+  console.log(`  SessionStart hook:  ${hasSession ? "installed" : "not found"}`);
+  console.log(`  PreToolUse hook:    ${hasPreTool ? "installed" : "not found"}`);
+  console.log(`  PostToolUse hook:   ${hasPostTool ? "installed" : "not found"}`);
 
-  if (both) {
+  if (all) {
     console.log("\nAll hooks are configured. Protection is active.");
-  } else if (hasSession || hasPreTool) {
+  } else if (hasSession || hasPreTool || hasPostTool) {
     console.log("\nWarning: Some hooks are missing. Run `stream-leak-guard init` to fix.");
   } else {
     console.log("\nNo hooks found. Run `stream-leak-guard init` to set up.");
@@ -230,8 +255,8 @@ function cmdDisable() {
     return;
   }
 
-  const { both } = hasGuardHooks(settings);
-  if (!both && !hasGuardHooks(settings).hasSession && !hasGuardHooks(settings).hasPreTool) {
+  const hookStatus = hasGuardHooks(settings);
+  if (!hookStatus.hasSession && !hookStatus.hasPreTool && !hookStatus.hasPostTool) {
     console.log("stream-leak-guard hooks are not installed.");
     return;
   }
@@ -262,7 +287,8 @@ Usage:
 
 Hook mode (called by Claude Code):
   stream-leak-guard --hook session-start
-  stream-leak-guard --hook pre-tool-use`);
+  stream-leak-guard --hook pre-tool-use
+  stream-leak-guard --hook post-tool-use`);
 }
 
 // ── Main ──

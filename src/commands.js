@@ -122,6 +122,64 @@ function checkSingleCommand(cmd) {
     };
   }
 
+  // grep/rg/ag targeting .env files
+  if (["grep", "rg", "ag", "egrep", "fgrep"].includes(base)) {
+    if (hasEnvFileArg(parts)) {
+      return {
+        blocked: true,
+        reason: `Using \`${base}\` to search .env files would expose secret values on screen`,
+        suggestion: "Reference specific env variables by name instead of searching .env files",
+      };
+    }
+  }
+
+  // awk/sed/cut/sort/tr/wc/tee/xargs/strings targeting .env files
+  if (["awk", "sed", "cut", "sort", "tr", "wc", "tee", "xargs", "strings"].includes(base)) {
+    if (hasEnvFileArg(parts)) {
+      return {
+        blocked: true,
+        reason: `Using \`${base}\` on .env files would expose secret values on screen`,
+        suggestion: "Reference specific env variables by name instead of processing .env files",
+      };
+    }
+  }
+
+  // Inline code execution accessing .env files
+  if (base === "node" && (parts.includes("-e") || parts.includes("--eval"))) {
+    const codeStr = trimmed.slice(trimmed.indexOf("-e"));
+    if (/\.env/i.test(codeStr)) {
+      return {
+        blocked: true,
+        reason: "Inline Node.js code accessing .env files would expose secret values",
+        suggestion: "Reference specific env variables using process.env.VAR_NAME instead",
+      };
+    }
+  }
+
+  if (base === "python" || base === "python3") {
+    if (parts.includes("-c")) {
+      const codeStr = trimmed.slice(trimmed.indexOf("-c"));
+      if (/\.env/i.test(codeStr)) {
+        return {
+          blocked: true,
+          reason: "Inline Python code accessing .env files would expose secret values",
+          suggestion: "Reference specific env variables using os.environ['VAR_NAME'] instead",
+        };
+      }
+    }
+  }
+
+  if (base === "ruby" && parts.includes("-e")) {
+    const codeStr = trimmed.slice(trimmed.indexOf("-e"));
+    if (/\.env/i.test(codeStr)) {
+      return {
+        blocked: true,
+        reason: "Inline Ruby code accessing .env files would expose secret values",
+        suggestion: "Reference specific env variables using ENV['VAR_NAME'] instead",
+      };
+    }
+  }
+
   // echo/printf with secret-looking variable names
   if (["echo", "printf"].includes(base)) {
     const rest = trimmed.slice(base.length);
@@ -137,7 +195,33 @@ function checkSingleCommand(cmd) {
     }
   }
 
+  // Generic catch-all: any command with a .env file argument
+  if (hasEnvFileArg(parts)) {
+    return {
+      blocked: true,
+      reason: `Command targets a .env file which could expose secret values`,
+      suggestion: "Reference specific env variables by name instead of accessing .env files directly",
+    };
+  }
+
   return null;
+}
+
+/**
+ * Check if any argument in a command's parts looks like a .env file path.
+ * Skips the first element (the command name) and flag-like arguments.
+ */
+function hasEnvFileArg(parts) {
+  for (let i = 1; i < parts.length; i++) {
+    const arg = parts[i];
+    // Skip flags
+    if (arg.startsWith("-")) continue;
+    // Check if argument is or contains a .env file reference
+    if (/^\.env/.test(arg) || /\/\.env/.test(arg)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

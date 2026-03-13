@@ -80,4 +80,59 @@ function sanitizeForOutput(message, secretValues) {
   return result;
 }
 
-module.exports = { scanForSecrets, sanitizeForOutput, isAssignmentContext };
+/**
+ * Redact secret values and patterns from text (for PostToolUse output scanning).
+ * Returns { redacted: string, redactionCount: number }
+ */
+function redactSecrets(text, secretValues, valueToName, patterns = [], customPatterns = []) {
+  if (!text) return { redacted: text, redactionCount: 0 };
+
+  // Binary safety: if text contains null bytes, return unchanged
+  if (text.includes("\0")) return { redacted: text, redactionCount: 0 };
+
+  let result = text;
+  let redactionCount = 0;
+  const largeOutput = text.length > 1_000_000;
+
+  // 1. Exact value redaction — sorted by length descending to avoid partial-match corruption
+  if (secretValues) {
+    const sorted = [...secretValues].sort((a, b) => b.length - a.length);
+    for (const secret of sorted) {
+      if (result.includes(secret)) {
+        const name = valueToName ? valueToName.get(secret) : "UNKNOWN";
+        const count = result.split(secret).length - 1;
+        result = result.split(secret).join(`[REDACTED:${name || "UNKNOWN"}]`);
+        redactionCount += count;
+      }
+    }
+  }
+
+  // 2. Pattern-based redaction (skip for large outputs)
+  if (!largeOutput) {
+    for (const pattern of patterns) {
+      const globalRe = new RegExp(pattern.regex.source, pattern.regex.flags.includes("g") ? pattern.regex.flags : pattern.regex.flags + "g");
+      const matches = result.match(globalRe);
+      if (matches) {
+        redactionCount += matches.length;
+        result = result.replace(globalRe, `[REDACTED:${pattern.name}]`);
+      }
+    }
+
+    for (const custom of customPatterns) {
+      try {
+        const re = new RegExp(custom.regex || custom, "g");
+        const matches = result.match(re);
+        if (matches) {
+          redactionCount += matches.length;
+          result = result.replace(re, `[REDACTED:${custom.name || "CustomPattern"}]`);
+        }
+      } catch {
+        // Invalid regex, skip
+      }
+    }
+  }
+
+  return { redacted: result, redactionCount };
+}
+
+module.exports = { scanForSecrets, sanitizeForOutput, isAssignmentContext, redactSecrets };

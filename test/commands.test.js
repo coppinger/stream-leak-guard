@@ -138,6 +138,124 @@ describe("analyzeCommand", () => {
     });
   });
 
+  describe("grep/rg/ag on .env files", () => {
+    test("blocks `grep SECRET .env`", () => {
+      const result = analyzeCommand("grep SECRET .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `grep SECRET .env.local`", () => {
+      const result = analyzeCommand("grep SECRET .env.local");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `rg pattern .env`", () => {
+      const result = analyzeCommand("rg pattern .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `ag pattern .env.production`", () => {
+      const result = analyzeCommand("ag pattern .env.production");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("allows `grep pattern README.md`", () => {
+      const result = analyzeCommand("grep pattern README.md");
+      expect(result.blocked).toBe(false);
+    });
+  });
+
+  describe("awk/sed/cut on .env files", () => {
+    test("blocks `awk -F= '{print $2}' .env`", () => {
+      const result = analyzeCommand("awk -F= '{print $2}' .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `sed -n '2p' .env.local`", () => {
+      const result = analyzeCommand("sed -n '2p' .env.local");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `cut -d= -f2 .env`", () => {
+      const result = analyzeCommand("cut -d= -f2 .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `sort .env`", () => {
+      const result = analyzeCommand("sort .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `strings .env`", () => {
+      const result = analyzeCommand("strings .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("allows `awk '{print $1}' data.txt`", () => {
+      const result = analyzeCommand("awk '{print $1}' data.txt");
+      expect(result.blocked).toBe(false);
+    });
+  });
+
+  describe("inline code execution targeting .env", () => {
+    test("blocks `node -e` reading .env", () => {
+      const result = analyzeCommand('node -e "require(\'fs\').readFileSync(\'.env\')"');
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `python -c` reading .env", () => {
+      const result = analyzeCommand("python -c \"open('.env').read()\"");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `python3 -c` reading .env", () => {
+      const result = analyzeCommand("python3 -c \"open('.env').read()\"");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `ruby -e` reading .env", () => {
+      const result = analyzeCommand("ruby -e \"File.read('.env')\"");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("allows `node -e` without .env", () => {
+      const result = analyzeCommand("node -e \"console.log('hello')\"");
+      expect(result.blocked).toBe(false);
+    });
+  });
+
+  describe("generic catch-all for .env file arguments", () => {
+    test("blocks `cp .env /tmp/`", () => {
+      const result = analyzeCommand("cp .env /tmp/");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `diff .env .env.bak`", () => {
+      const result = analyzeCommand("diff .env .env.bak");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `xxd .env`", () => {
+      const result = analyzeCommand("xxd .env");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks `mv .env.local /tmp/`", () => {
+      const result = analyzeCommand("mv .env.local /tmp/");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("blocks commands with path to .env", () => {
+      const result = analyzeCommand("cp /home/user/project/.env /tmp/");
+      expect(result.blocked).toBe(true);
+    });
+
+    test("allows commands with no .env args", () => {
+      const result = analyzeCommand("cp file.txt /tmp/");
+      expect(result.blocked).toBe(false);
+    });
+  });
+
   describe("compound commands", () => {
     test("blocks dangerous command in pipe", () => {
       const result = analyzeCommand("echo hello | env");
